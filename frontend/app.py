@@ -126,6 +126,6 @@ iface = gr.Interface(
     title="AI Doctor"
 )
 
-iface.launch(debug=True)
+iface.launch(debug=True, allowed_paths=[os.path.join(PARENT_DIR, 'uploads')])
 
 #http://127.0.0.1:7860

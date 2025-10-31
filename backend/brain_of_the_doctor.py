@@ -10,8 +10,7 @@ GROQ_API_KEY=os.environ.get("GROQ_API_KEY")
 #Step2: Convert image to required format
 import base64
 
-
-#image_path="acne.jpg"
+#image convert to base64  
 
 def encode_image(image_path):   
     image_file=open(image_path, "rb")
