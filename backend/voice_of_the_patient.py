@@ -1,25 +1,27 @@
-# if you dont use pipenv uncomment the following:
 from dotenv import load_dotenv
 load_dotenv()
 
-#Step1: Setup Audio recorder (ffmpeg & portaudio)
-# ffmpeg, portaudio, pyaudio
+import os
 import logging
-import speech_recognition as sr
-from pydub import AudioSegment
 from io import BytesIO
+from pydub import AudioSegment
+from groq import Groq
+
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def record_audio(file_path, timeout=20, phrase_time_limit=None):
     """
     Simplified function to record audio from the microphone and save it as an MP3 file.
-
-    Args:
-    file_path (str): Path to save the recorded audio file.
-    timeout (int): Maximum time to wait for a phrase to start (in seconds).
-    phrase_time_lfimit (int): Maximum time for the phrase to be recorded (in seconds).
     """
+    if sr is None:
+        logging.error("speech_recognition library is not installed or failed to import. Local audio recording is unavailable.")
+        return
+
     recognizer = sr.Recognizer()
     
     try:
@@ -40,26 +42,31 @@ def record_audio(file_path, timeout=20, phrase_time_limit=None):
             logging.info(f"Audio saved to {file_path}")
 
     except Exception as e:
-        logging.error(f"An error occurred: {e}")
+        logging.error(f"An error occurred during local recording: {e}")
 
-audio_filepath="patient_voice_test_for_patient.mp3"
-#record_audio(file_path=audio_filepath)
 
-#Step2: Setup Speech to text–STT–model for transcription
-import os
-from groq import Groq
+def transcribe_with_groq(stt_model="whisper-large-v3", audio_filepath=None, GROQ_API_KEY=None):
+    """
+    Transcribe audio file using Groq Whisper API.
+    """
+    if not audio_filepath or not os.path.exists(audio_filepath):
+        return ""
 
-GROQ_API_KEY=os.environ.get("GROQ_API_KEY")
-stt_model="whisper-large-v3"
+    api_key = GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        logging.warning("GROQ_API_KEY is not set. Cannot transcribe audio.")
+        return "Audio provided, but GROQ_API_KEY is not configured."
 
-def transcribe_with_groq(stt_model, audio_filepath, GROQ_API_KEY):
-    client=Groq(api_key=GROQ_API_KEY)
-    
-    audio_file=open(audio_filepath, "rb")
-    transcription=client.audio.transcriptions.create(
-        model=stt_model,
-        file=audio_file,
-        language="en"
-    )
+    try:
+        client = Groq(api_key=api_key)
+        with open(audio_filepath, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model=stt_model or "whisper-large-v3",
+                file=audio_file,
+                language="en"
+            )
+        return transcription.text
+    except Exception as e:
+        logging.error(f"Error during audio transcription: {e}")
+        return f"[Transcription error: {e}]"
 
-    return transcription.text
