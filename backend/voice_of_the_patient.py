@@ -59,8 +59,13 @@ def transcribe_with_groq(stt_model="whisper-large-v3", audio_filepath=None, GROQ
 
     api_key = GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
     if not api_key:
+        load_dotenv(os.path.join(PROJECT_ROOT, ".env"), override=True)
+        api_key = os.environ.get("GROQ_API_KEY")
+
+    if not api_key:
         logging.warning("GROQ_API_KEY is not set. Cannot transcribe audio.")
         return "Audio provided, but GROQ_API_KEY is not configured."
+
 
     try:
         client = Groq(api_key=api_key)

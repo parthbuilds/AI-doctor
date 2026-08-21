@@ -34,7 +34,12 @@ def analyze_image_with_query(query, model=None, encoded_image=None):
     """
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        return "Error: GROQ_API_KEY is not set. Please set your GROQ_API_KEY in the .env file."
+        load_dotenv(os.path.join(PROJECT_ROOT, ".env"), override=True)
+        api_key = os.environ.get("GROQ_API_KEY")
+
+    if not api_key:
+        return "Error: GROQ_API_KEY is not set. Please set your GROQ_API_KEY in the .env file and restart the server."
+
 
     client = Groq(api_key=api_key)
 
