@@ -1,9 +1,17 @@
 import os
 import platform
 import logging
+from dotenv import load_dotenv
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+load_dotenv()
+
 from gtts import gTTS
 import elevenlabs
 from elevenlabs.client import ElevenLabs
+
 from elevenlabs.core.api_error import ApiError
 from pydub import AudioSegment, effects
 
@@ -76,13 +84,18 @@ def text_to_speech_with_elevenlabs(input_text, output_filepath, speed: float = 1
     try:
         os.makedirs(os.path.dirname(os.path.abspath(output_filepath)), exist_ok=True)
         client = ElevenLabs(api_key=eleven_key)
-        audio = client.generate(
-            text=input_text,
-            voice="Aria",
-            output_format="mp3_22050_32",
-            model="eleven_turbo_v2"
+        
+        # Clean text
+        clean_text = input_text.replace("*", "").replace("#", "").replace("-", " ")
+        audio_stream = client.text_to_speech.convert(
+            voice_id="JBFqnCBsd6RMkjVDRZzb",
+            text=clean_text,
+            model_id="eleven_multilingual_v2"
         )
-        elevenlabs.save(audio, output_filepath)
+        
+        with open(output_filepath, "wb") as f:
+            for chunk in audio_stream:
+                f.write(chunk)
         
         if speed and speed != 1.0:
             try:

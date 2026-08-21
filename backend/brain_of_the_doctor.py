@@ -1,15 +1,21 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
 import base64
 import logging
+from dotenv import load_dotenv
+
+# Ensure .env is reliably loaded regardless of execution cwd
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+load_dotenv()
+
 from groq import Groq
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DEFAULT_VISION_MODEL = "llama-3.2-11b-vision-preview"
-DEFAULT_TEXT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_TEXT_MODEL = "openai/gpt-oss-120b"
+FALLBACK_TEXT_MODEL = "openai/gpt-oss-20b"
+VISION_MODELS = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
 
 def encode_image(image_path):
     """Safely convert an image file to base64 encoding."""
@@ -24,7 +30,7 @@ def encode_image(image_path):
 
 def analyze_image_with_query(query, model=None, encoded_image=None):
     """
-    Analyze image with query or perform text-only analysis via Groq.
+    Analyze patient symptoms and image using Groq LLM.
     """
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
@@ -32,63 +38,43 @@ def analyze_image_with_query(query, model=None, encoded_image=None):
 
     client = Groq(api_key=api_key)
 
-    # Determine model and build message structure
+    # 1. If image is present, try vision models first if available
     if encoded_image:
-        target_model = model or DEFAULT_VISION_MODEL
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": query
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{encoded_image}",
-                        },
-                    },
-                ],
-            }
-        ]
-    else:
-        target_model = DEFAULT_TEXT_MODEL
-        messages = [
-            {
-                "role": "user",
-                "content": query
-            }
-        ]
+        for v_model in VISION_MODELS:
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": query},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}},
+                            ],
+                        }
+                    ],
+                    model=v_model
+                )
+                return chat_completion.choices[0].message.content
+            except Exception:
+                continue
 
-    try:
-        chat_completion = client.chat.completions.create(
-            messages=messages,
-            model=target_model
-        )
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        logging.error(f"Groq API call failed with model {target_model}: {e}")
-        # Try fallback model if vision model failed
-        if encoded_image and target_model != "llama-3.2-90b-vision-preview":
-            try:
-                logging.info("Retrying with llama-3.2-90b-vision-preview...")
-                chat_completion = client.chat.completions.create(
-                    messages=messages,
-                    model="llama-3.2-90b-vision-preview"
-                )
-                return chat_completion.choices[0].message.content
-            except Exception as e2:
-                logging.error(f"Fallback vision model also failed: {e2}")
-        elif not encoded_image and target_model != "llama-3.1-8b-instant":
-            try:
-                logging.info("Retrying with llama-3.1-8b-instant...")
-                chat_completion = client.chat.completions.create(
-                    messages=messages,
-                    model="llama-3.1-8b-instant"
-                )
-                return chat_completion.choices[0].message.content
-            except Exception as e2:
-                logging.error(f"Fallback text model also failed: {e2}")
-        return f"Medical analysis service temporarily unavailable: {e}"
+    # 2. Text-based clinical analysis with high-capability model
+    target_models = [model or DEFAULT_TEXT_MODEL, FALLBACK_TEXT_MODEL, "groq/compound", "qwen/qwen3.6-27b"]
+    last_err = None
+
+    for m in target_models:
+        if not m:
+            continue
+        try:
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": query}],
+                model=m
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            last_err = e
+            logging.warning(f"Groq model {m} failed: {e}. Trying fallback...")
+
+    return f"Medical analysis service temporarily unavailable: {last_err}"
+
 

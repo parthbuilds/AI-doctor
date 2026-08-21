@@ -1,11 +1,16 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
 import logging
 from io import BytesIO
 from pydub import AudioSegment
+from dotenv import load_dotenv
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+load_dotenv()
+
 from groq import Groq
+
 
 try:
     import speech_recognition as sr
